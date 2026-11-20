@@ -7,154 +7,84 @@ date: 2017-02-28T11:45:44.128Z
 tags:
   - jwt
   - auth
+last_updated: 2026-11-20T10:38:51.000Z
 ---
 
-## What is it?
+A JSON Web Token (JWT) carries claims between systems. A claim is a statement, such as who a token represents or when it expires.
 
-> _JSON Web Token (JWT) is a compact, URL-safe means of representing claims to be transferred between two parties. The claims in a JWT are encoded as a JSON object that is used as the payload of a JSON Web Signature (JWS) structure or as the plaintext of a JSON Web Encryption (JWE) structure, enabling the claims to be digitally signed or integrity protected with a Message Authentication Code (MAC) and/or encrypted._
-
-JSON Web Tokens are an open, industry-standard [**RFC 7519**](https://tools.ietf.org/html/rfc7519) method for representing claims securely between two parties. See here: [https://jwt.io](https://jwt.io "https://jwt.io")
+A signed token lets a receiver check its integrity and that it was created by someone holding the signing key. That doesn't make the claims confidential, or make every action described by them authorised.
 
 <!--truncate-->
 
-In this context, "claim" can be something like a "command", a one-time authorization, or basically any other scenario that you can word as:
+## What a signed token contains
 
-> _Hello Server B, Server A told me that I could "**claim goes here**", and here’s the (cryptographic) proof._
+A common signed JWT uses three base64url-encoded parts, separated by dots:
 
-Before we dive into this further, I’d like to define some terms we use in the realm of authentication.
-
-> **_Authentication_** _— Proving who you are_
->
-> **_Authorization_** _— Being granted access to resources_
->
-> **_Token_** _— medium used to persist authentication and get authorization_
-
-## So, what does It Look Like?
-
-Well, it looks like another confusing looking string
-
-    eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeFONFh7HgQ
-
-Upon closer inspections, you’ll see that this JWT consist of three parts separated by dots (`.`), which are:
-
-- Header
-- Payload
-- Signature
-
-    Header.Payload.Signature
-
-So, let’s break it down a little:
-
-```js
-// header
-    eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
-// payload
-    .eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9
-// signature
-    .TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeFONFh7HgQ
+```text
+header.payload.signature
 ```
 
-### Header
+For example, the decoded header might be:
 
-
-```json title="HS256 indicates that this token is signed using HMAC-SHA256."
+```json
 {
-    "alg": "HS256",
-    "typ": "JWT"
+  "alg": "HS256",
+  "typ": "JWT"
 }
 ```
 
-### Claims/Payload
+And the payload:
 
-```json title="The payload contains the claims that we wish to make"
-{ "sub": "1234567890", "name": "John Doe", "admin": true}
-```
-
-### Signature
-
-We use the following formula to calcalate signature
-
-```js
-HMACSHA256(encodeBase64(header) + "." + encodeBase64(payload), secret)
-```
-
-This then gives us something like:
-
-```
-thiseyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJsb2dnZWRJbkFzIjoiYWRtaW4iLCJpYXQiOjE0MjI3Nzk2Mzh9.gzSraSYS8EXBxLN_oWnFSRgCzcmJmMjLiuyu5CSpyHI
-```
-
-Let’s expand on the claims section of JWT. The following claims are part of the RFC document:
-
-**iss**: who is the issuer of this token auth.example.com **sub**: what is the subject of this token e.g. auth **aud**: who can use this token e.g ['client1.example.com','client2.example.com'] **exp**: Defines the expiration time as unix timestamp e.g. 1488192525 **nbf**: define how long after the issued token was generated we can use it e.g. 300 seconds (5 minutes) **iat**: issued at is a unix timestamp e.g. 1488192525 **jti**: JWT ID unique id. This can be used to prevent a token from being replayed e.g. "xa443D"
-
-The key names are case sensitive and have been kept small to keep the JSON payload compact.
-
-## How does the Authentication Flow work?
-
-In authentication, when the user successfully logs in using their credentials, a JSON Web Token will be returned and must be saved locally (typically in local storage, but cookies can be also used), instead of the traditional approach of creating a session in the server and returning a cookie.
-
-```json title="POST /login"
+```json
 {
-    email: "username@example-domain.com"
-    password: "5£cUr3PA$$W0rd!"
+  "sub": "1234567890",
+  "name": "John Doe",
+  "admin": true
 }
 ```
 
-```json title="Response 201 Created"
-{
-    token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeFONFh7HgQ"
-}
+The signature covers the encoded header and payload. With HS256, it uses HMAC-SHA256 and a shared secret. Other algorithms use a private key to sign and a public key to verify. Use a maintained library rather than implementing this yourself. The signed format is defined in [RFC 7515](https://www.rfc-editor.org/rfc/rfc7515).
+
+Anyone holding a signed token can decode its header and payload. Signing protects integrity, not confidentiality. Encrypted JWTs use a different representation.
+
+## Common claims
+
+[RFC 7519](https://www.rfc-editor.org/rfc/rfc7519) defines these registered claims:
+
+| Claim | Meaning |
+| --- | --- |
+| `iss` | Issuer |
+| `sub` | Subject, such as a user identifier |
+| `aud` | Intended recipient or recipients |
+| `exp` | Expiration time |
+| `nbf` | Time before which the token is not accepted |
+| `iat` | Time the token was issued |
+| `jti` | Token identifier |
+
+The time claims use seconds since the Unix epoch. `nbf` is a timestamp, not a delay after issuance. Claim names are case-sensitive. The application or token profile determines which claims are required and how to interpret custom claims such as `admin`.
+
+## Using a token in an API
+
+An authentication service can issue a token after checking a user's credentials. A client can then present it to an API using the Bearer scheme:
+
+```http
+Authorization: Bearer <access-token>
 ```
 
-Any subsequent calls to the API would typically send the Authorization header using the Bearer schema.
+The API needs to validate the token before using its claims. For a signed access token, that includes checking the signature with an allowed algorithm and trusted key, then checking the expected issuer, audience and relevant time constraints. [RFC 8725](https://www.rfc-editor.org/rfc/rfc8725) covers JWT validation practices and common implementation failures.
 
-```js
-Authorization: "Bearer myToken"
-```
+A valid token isn't permission to do everything. The API still needs to decide whether the caller can perform the requested operation on the requested resource.
 
-Therefore the content of the header should look like the following.
+Authentication establishes who a caller is. Authorisation determines what that caller can do. A JWT can carry information used in those decisions; it doesn't replace them.
 
-```js title="GET /"
-# Headers
-Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeFONFh7HgQ"
-```
+## What JWTs don't solve
 
-This is a stateless authentication mechanism as the user state is never saved in the server memory. The server’s protected routes will check for a valid JWT in the Authorization header, and if there is, the user will be allowed.
+**Revocation and stale claims.** If a user's permissions change, an already issued token may still contain the old values. Expiry limits its lifetime, but immediate revocation needs an additional mechanism, such as a server-side check. A `jti` value alone doesn't prevent replay.
 
-- signature valid?
-- client allowed? aud- expected issuer? iss- can this token be used? nbf
+**Browser security.** Token storage is a separate design choice. JWT doesn't prescribe local storage or cookies, and the format doesn't remove the risks of script access or cross-site requests.
 
-As JWTs are self-contained, all the necessary information is there, reducing the need of going back and forward to the database. This allows us to fully rely on data APIs that are stateless and even make requests to downstream services. It doesn’t matter which domains are serving the APIs, as Cross-Origin Resource Sharing (CORS) won’t be an issue as it doesn’t use cookies.
+**Cross-origin access.** Bearer tokens don't bypass [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS). A browser request with an `Authorization` header can require a preflight, and the server must allow the relevant origin and header.
 
-## Making a case for JWT
+**Server-side state.** An API may be able to validate a self-contained token without looking up a session on every request. That doesn't mean the whole application is stateless or never needs current permission data.
 
-- **Portability**: they work across many different platforms, having implementations in various programming languages.
-- **Compact**: Because of its size, it can be sent through an URL, POST parameter, or inside an HTTP header. Additionally, due to its size its transmission is fast.
-- **Self-contained:** The payload contains all the required information about the user, to avoid querying the database more than once.
-- **Control:** Allows fine grained control over types of permissions. You can specify detailed access control information within _the token itself_ as part of its payload. For instance, in the same way that you can create AWS security policies with very specific permissions, you can limit the token to only give read/write access to a single resource. In contrast, API Keys tend to have a coarse all-or-nothing access.
-
-## Problems with JWT
-
-- Cannot be used in place of Sessions & Cookies. If we want to use them in such a manner, then stick with Sessions and Cookies.
-- Data goes stale. For instance, an admin with a JWT token has had their access revoked but the token will keep on working because it was generated and verified correctly with the secret key.
-- There’s a critical vulnerability when using Asymmetric keys. The attackers know which algorithm was used to generate the token. This is open to abuse from the attackers. The server should already know which algorithm was used to generate/verify the integrity of this token.
-
-## Conclusion
-
-JSON Web Tokens offer many advantages but not without having some drawbacks. If you work on an extremely large-scale application, sessions could be the appropriate choice. It is completely reasonable to combine sessions and JWT — they each have their own purpose, and sometimes you need both. Just don’t use JWT for _persistent_ data.
-
----
-
-## Further Reading
-
-Thanks to the following:
-
-- [https://tools.ietf.org/html/rfc7519](https://tools.ietf.org/html/rfc7519 "https://tools.ietf.org/html/rfc7519")
-- [http://self-issued.info/docs/draft-ietf-oauth-json-web-token.html#RegisteredClaimName](http://self-issued.info/docs/draft-ietf-oauth-json-web-token.html#RegisteredClaimName "http://self-issued.info/docs/draft-ietf-oauth-json-web-token.html#RegisteredClaimName")
-- [https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/](https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/ "https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/")
-- [https://auth0.com/learn/json-web-tokens/](https://auth0.com/learn/json-web-tokens/ "https://auth0.com/learn/json-web-tokens/")
-- [https://www.slideshare.net/lcobucci/jwt-to-authentication-and-beyond](https://www.slideshare.net/lcobucci/jwt-to-authentication-and-beyond "https://www.slideshare.net/lcobucci/jwt-to-authentication-and-beyond")
-- [https://www.slideshare.net/a_z_e_t/javascript-object-signing-encryption](https://www.slideshare.net/a_z_e_t/javascript-object-signing-encryption "https://www.slideshare.net/a_z_e_t/javascript-object-signing-encryption")
-- [http://christhorntonsf.com/secure-your-apis-with-jwt/](http://christhorntonsf.com/secure-your-apis-with-jwt/ "http://christhorntonsf.com/secure-your-apis-with-jwt/")
-- [http://cryto.net/\~joepie91/blog/2016/06/13/stop-using-jwt-for-sessions/](http://cryto.net/~joepie91/blog/2016/06/13/stop-using-jwt-for-sessions/ "http://cryto.net/~joepie91/blog/2016/06/13/stop-using-jwt-for-sessions/")
+JWTs are useful when systems need to exchange verifiable claims. For a browser application, a server-side session may be simpler. Choose the authentication and session design first, then use a token format where it serves that design.

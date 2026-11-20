@@ -1,5 +1,5 @@
 ---
-title: TDD Was Solving the Agent Problem Before Agents Existed
+title: "TDD makes code easier for agents to work with"
 slug: tdd-was-solving-the-agent-problem-before-agents-existed
 date: 2026-05-21T04:00:00.000Z
 authors: [ambersariya]
@@ -8,32 +8,37 @@ tags:
   - tdd
   - developer-experience
   - agile
+last_updated: 2026-11-20T10:38:51.000Z
 ---
 
 The first time I set an agent loose on a real codebase, it ran out of context before it had done anything useful. That's a clarifying experience.
 
-The repository wasn't exotic — a Python monorepo with shared libraries and some infrastructure code. I drew a diagram to understand what was happening. A rectangle for the full context window; blocks for what was already consumed just from loading the codebase: directory tree, CLAUDE.md, relevant modules, config, dependencies. The bar was more than half full before the agent had read a single line of task context or seen a single error message.
+It was a Python monorepo with shared libraries and infrastructure code. I sketched the context window as a rectangle and filled in what the agent had loaded: the directory tree, instructions, modules, configuration and dependencies. More than half the space was gone before it reached the task.
 
 <!-- truncate -->
 
-That image stuck with me. Half the agent's working memory gone on orientation alone. And the uncomfortable follow-up question: whose fault is that?
+A codebase with unclear boundaries, large modules and implicit conventions makes an agent spend its context working out where it is. A new engineer has the same orientation problem, but can build understanding over weeks. In the setup I was using, the agent started each session without that accumulated knowledge.
 
-Mostly ours, it turns out.
+That made familiar engineering practices feel useful in a new way.
 
-A codebase with fuzzy boundaries, large unfocused modules, and implicit conventions forces the agent to do the same orientation work a new engineer would do — except a new engineer can ask questions, build intuition over weeks, and remember what they learned yesterday. With the tools I've been using, there's no persistent memory between sessions by default. Every session is effectively day one. The codebase has to compensate for what the agent can't retain.
+## Tests give the agent somewhere to start
 
-There's a body of practice — going back about twenty-five years — that points in exactly this direction. We just didn't know we were solving this particular problem at the time.
+Test-driven development (TDD) and the Extreme Programming (XP) practices around it encourage small steps, simple design and regular refactoring. When applied well, those practices can produce focused modules, explicit interfaces and tests that describe intended behaviour.
 
-TDD and the XP practices around it — simple design, ruthless refactoring, tests as documentation — produce exactly the properties that make a codebase agent-readable. Small focused units with explicit interfaces. Behaviour described in tests rather than buried in implementation. No accidental complexity quietly accumulating in corners. Clear boundaries that tell you where one thing ends and another begins.
+Those are useful properties when an agent can only hold part of a codebase in context.
 
-None of this is new. But the agentic era has made the value of it more visible. The "too much to hold in your head at once" problem that TDD was designed to address is the same problem the context window makes concrete. A codebase with small focused units and tests that describe behaviour fits into an agent's context cleanly. One where complexity has accumulated unchecked — regardless of how it got there — does not.
+A test called `test_chat_service_returns_error_on_empty_prompt` gives it a place to investigate the empty-prompt rule. It still needs to read the assertions and relevant implementation. But it has a starting point, rather than several hundred lines of service code to search without direction.
 
-Tests also do something specific for agents that code alone can't: they describe intended behaviour without requiring the agent to read the implementation. A test called `test_chat_service_returns_error_on_empty_prompt` tells the agent more in one line than several hundred lines of service code could. When an agent needs to understand a boundary, it reads the tests. Targeted context. Problem contained.
+Tests also give feedback after a change. The agent doesn't have to infer every expectation from the current implementation, which might be the thing that's wrong.
 
-The cost angle is real too. Context is billed by the token. An agent flailing around a poorly structured codebase — re-reading files, tracing implicit dependencies, inferring conventions that should be explicit — is burning money before it's produced anything. Good structure isn't just clean, it's cheap.
+This depends on the tests. A suite tied to private methods or incidental implementation details can make changes harder. Passing tests show that the checked expectations hold, not that the design is sound or every requirement is covered.
 
-This also connects to the current conversation around "vibe-coding" and agents generating code freely. From what I've seen, the concern isn't really about whether the agent can write working code — it often can. The concern is whether the codebase it's writing into has enough structure to keep the output coherent over time. Architecture tests help here too: codify the rules, and both human and agent get immediate feedback when something drifts from the intended shape.
+## Structure reduces repeated investigation
 
-The agentic era didn't invent a new problem. It gave us a new, very legible way to feel the cost of one we'd been politely ignoring for years.
+I've watched agents re-read files, trace implicit dependencies and rediscover conventions that could have been explicit. That costs time and context. With token-based billing, it can cost money too.
 
-TDD and XP have always pushed toward properties — small units, explicit interfaces, behaviour-as-tests — that turn out to be just as valuable for agents as they are for humans. The reasons stack up.
+Small modules help when they have clear responsibilities. Splitting one confusing module into ten confusing files doesn't solve the problem.
+
+[Architecture tests](/your-codebase-has-rules-does-ci-know-that/) can help with structural rules. If the API must not import database modules, make that expectation executable. Human and agent get the same feedback when a change crosses the boundary.
+
+TDD doesn't guarantee that a codebase will be easy for agents to navigate. But the things I value in a testable codebase also help here: behaviour I can find, dependencies I can see and changes I can check without understanding the whole system first.

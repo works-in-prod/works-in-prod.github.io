@@ -1,5 +1,5 @@
 ---
-title: You Can't Debug What Bedrock Swallowed
+title: "Tracing a Bedrock application with OpenTelemetry"
 slug: you-cant-debug-what-bedrock-swallowed
 date: 2026-05-21T05:00:00.000Z
 authors: [ambersariya]
@@ -8,54 +8,62 @@ tags:
   - observability
   - python
   - opentelemetry
+last_updated: 2026-11-20T10:38:51.000Z
 ---
 
-There's a particular kind of hell reserved for debugging LLM-backed systems that nobody bothered to instrument. You've got a request that took twelve seconds and you don't know if the slow part was your retrieval pipeline, the prompt construction, the Bedrock call itself, or the post-processing that turned the model's output into something you'd actually show a user. You have logs. You have vibes. You have, essentially, nothing.
+A request takes twelve seconds. Was the time spent retrieving context, building the prompt, waiting for Bedrock or processing the response?
 
-We hit this early on an LLM project and it focused the mind quickly.
+We hit this early on an LLM project. A single request duration wasn't enough to tell us where to look. Tracing the steps around the model call made the delay easier to investigate.
 
 <!-- truncate -->
 
-AWS Bedrock is opaque by design. You send a prompt, you get tokens back, and what happens between those two events isn't your concern. That's fine — it's not your model to look inside.
+## Trace the code you control
 
-The problem is when that opacity bleeds into the code *you* wrote. Your retrieval logic, your prompt templates, your retry handling, your fallback paths — none of that needs to be a mystery. But without deliberate instrumentation, it becomes one anyway. You end up with a black box you built yourself, which is a considerably more embarrassing situation than the one Bedrock put you in.
+Amazon Bedrock runs the model, but retrieval, prompt assembly, retries and fallback handling are still part of your application. Those steps don't need to be a mystery just because inference happens elsewhere.
 
-Rather than manually sprinkling trace calls everywhere and inevitably missing the interesting bits, I wrote a Python decorator that wraps functions and methods automatically. Every call gets emitted as a span — class name, method name, duration, outcome — and it all folds into a single trace you can read in sequence:
+I used [OpenTelemetry spans](https://opentelemetry.io/docs/languages/python/instrumentation/) to make those boundaries visible. A span records an operation's timing and can carry attributes and error information. Nested spans show how the work fits together.
+
+For Python 3.10 or later, a small decorator can help with synchronous functions and methods:
 
 ```python
 import functools
-import time
+from collections.abc import Callable
+from typing import ParamSpec, TypeVar
+
 from opentelemetry import trace
 
-tracer = trace.get_tracer(__name__)
+Parameters = ParamSpec("Parameters")
+Result = TypeVar("Result")
 
-def traced(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        class_name = args[0].__class__.__name__ if args else ""
-        span_name = f"{class_name}.{func.__name__}" if class_name else func.__name__
 
-        with tracer.start_as_current_span(span_name) as span:
-            start = time.perf_counter()
-            try:
-                result = func(*args, **kwargs)
-                span.set_status(trace.StatusCode.OK)
-                return result
-            except Exception as exc:
-                span.record_exception(exc)
-                span.set_status(trace.StatusCode.ERROR, str(exc))
-                raise
-            finally:
-                span.set_attribute("duration_ms", (time.perf_counter() - start) * 1000)
-    return wrapper
+def traced(
+    tracer: trace.Tracer,
+) -> Callable[[Callable[Parameters, Result]], Callable[Parameters, Result]]:
+    def decorate(
+        function: Callable[Parameters, Result],
+    ) -> Callable[Parameters, Result]:
+        @functools.wraps(function)
+        def wrapper(*args: Parameters.args, **kwargs: Parameters.kwargs) -> Result:
+            with tracer.start_as_current_span(function.__qualname__):
+                return function(*args, **kwargs)
+
+        return wrapper
+
+    return decorate
 ```
 
-Apply it to the functions you care about and suddenly your trace reads like a story. Vector search: 40ms. Prompt assembly: 2ms. That "fast" Bedrock call that's actually 3.8 seconds because you're using a large model with a 6,000-token context and no caching — that's visible now. The information was always there. You just couldn't see it.
+Configure the OpenTelemetry SDK and exporter at application startup, then pass a tracer to the decorator: `@traced(trace.get_tracer(__name__))`. The span context records timing and, by default, exceptions that escape the block. Calling the API without a configured recording provider won't give you an exported trace.
 
-The part I didn't anticipate: OpenTelemetry handles both technical traces *and* business metrics through the same pipeline. We used it to answer latency questions ("why did this request take four seconds?") and business questions at the same time ("how many users hit the fallback path today?", "what's our prompt cache hit rate this week?"). Same instrumentation layer, different dimensions. There's something satisfying about a monitoring setup that doesn't require you to maintain two separate systems with two separate mental models.
+This wrapper doesn't handle coroutines or generators. For those, the span must cover the awaited work or stream consumption, rather than just the creation of a coroutine or iterator.
 
-Here's the thing that surprised me most: a well-instrumented LLM pipeline can actually be easier to reason about than a lot of distributed systems. The order of operations is relatively clear, and when every step emits a span, you can read a trace like a timeline. The non-determinism of the model itself is a different problem — spans won't tell you why the model said what it said — but at least the plumbing stops being a mystery.
+## Read the request as a timeline
 
-The opacity was never really about the LLM. It was about the code around the LLM that we hadn't bothered to make visible.
+Once the relevant steps were instrumented, we could distinguish time spent in retrieval, prompt assembly and the model call. That gave us somewhere specific to investigate instead of treating every slow request as a model problem.
 
-What I took from this: don't leave observability as something to add later when things go wrong. Wire it in from the start — it's the interface you build for yourself so that when Bedrock starts behaving oddly at 11pm, you have structured data to work with rather than a twelve-second request duration and a shrug.
+A long model span tells you where time went. It doesn't, by itself, prove the cause. Model choice, prompt size, caching and provider behaviour still need separate investigation.
+
+We also used OpenTelemetry for application metrics, including fallback use and prompt-cache hits. Those need deliberate instrumentation and an appropriate collection setup. A timing decorator doesn't automatically produce business metrics, and sampled traces aren't necessarily a reliable count of every request.
+
+Keep raw prompts, retrieved documents and user content out of span attributes unless you have an explicit, appropriate data-handling policy. Useful tracing shouldn't depend on copying sensitive content into another system.
+
+The model's output can still be difficult to explain. But we can make the surrounding application easier to inspect. I'd wire that in early, while the request path is still small enough to follow.

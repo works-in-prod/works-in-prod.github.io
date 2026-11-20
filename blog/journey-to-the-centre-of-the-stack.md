@@ -1,5 +1,5 @@
 ---
-title: Journey To The Centre Of The Stack
+title: "Journey to the centre of the stack"
 slug: journey-to-the-centre-of-the-stack
 description: Containerising legacy software has always been a journey into the unknown. What's changed is who you take with you.
 date: 2020-11-30 11:00:00 +0000
@@ -10,60 +10,45 @@ tags:
   - modernisation
   - ai-engineering
   - developer-experience
+last_updated: 2026-11-20T10:38:51.000Z
 ---
 
-I first wrote this post in 2020 after spending several weeks containerising a legacy application I hadn't built and didn't fully understand. The experience was mostly archaeology — reading old config files, tracing hardcoded paths, figuring out what half a dozen processes actually did before touching anything. By the time I had a working Docker image, I'd earned it.
+I first wrote this post in 2020 after spending several weeks containerising a legacy application I hadn't built and didn't fully understand. It was mostly archaeology: reading old configuration, tracing hardcoded paths and figuring out what half a dozen processes did before touching anything. By the time I had a working Docker image, I'd earned it.
 
-I'm updating it now because the journey has changed, and I think it's worth being honest about how.
+I'd approach parts of that work differently now, with AI tools helping me investigate the code. The decisions still need just as much care.
 
 <!-- truncate -->
 
-The destination is the same. Legacy modernisation still means diving into unfamiliar depth, finding the load-bearing assumptions nobody documented, and making a series of architectural decisions that will outlive the sprint you're in. None of that has gone away.
+## Getting oriented
 
-What's changed is the discovery phase. The part where you spend half a day grepping through twelve config files to find every hardcoded `/tmp` path. The part where you read three hundred lines of an entrypoint script to understand what order things start in. The part where you're trying to build a mental model of a system from first principles because the person who built it left two years ago.
+Working in unfamiliar legacy code takes concentration. Before you can decide what to change, you need to understand what you're looking at.
 
-That part is cheaper now. Not free — cheaper. And for senior engineers in particular, that matters more than it might sound.
+An agent can help map dependencies, find uses of a configuration value, summarise a module or trace what happens to an uploaded file. Those answers need checking, but they can give you a starting point faster than opening files without a clear route through them.
 
-## The cognitive load is the real cost
+That leaves more time for the architectural questions: where state belongs, how processes interact and which assumptions a container will break.
 
-When you're working in unfamiliar legacy code, there's a ceiling on how much you can think about architecture while simultaneously trying to understand what you're looking at. The mental budget goes to comprehension first and decision- making second.
+## What the code doesn't tell you
 
-AI tooling shifts that balance. You can ask an agent to map the dependency graph, find all the places a config value is used, summarise what a given module does, or trace what happens to a file after it's uploaded. It doesn't always get this perfectly right, but it gets you oriented faster. And orientation is the precondition for good architectural thinking.
+A hardcoded path might look easy to replace with an environment variable. But the code won't necessarily tell you about the cron job on the production server that expects files at that path.
 
-The senior engineer's job in a legacy modernisation isn't to read every file — it's to understand the system well enough to make the right calls. AI handles more of the reading. You do more of the deciding. That's a reasonable trade.
+The same problem applies to session storage, deployment defaults and shared directories. Some choices reflect constraints that still exist. Others are leftovers. You need evidence before deciding which is which.
 
-## What still requires a human
+An agent can only use the context it has. Deployment constraints, team agreements and the reasons behind old decisions may be missing from the repository. Talk to the people who know the system and check the running environment where you can.
 
-This is the part worth being direct about: you cannot vibe code your way through a legacy containerisation.
+Finding a dependency is useful. Establishing that it's safe to change is a separate job.
 
-Legacy systems have accumulated tradeoffs that aren't visible in the code itself. A hardcoded path exists for a reason. Session storage lives in a particular place because of a deployment constraint nobody remembered to remove. An environment variable has a default that only works in production because of how the CI pipeline was wired up five years ago.
+## How I'd approach it now
 
-An agent will find the path, tell you what it does, maybe suggest you move it to an env var. What it can't tell you is whether that change will break the cron job on the production server that six business processes depend on — the one that isn't in any of the tests because it predates the testing culture.
+**Map the application first.** Find the processes, configuration files, external services and hardcoded paths. Use an agent's summary to guide investigation, then verify the important relationships. A static read won't reveal every runtime behaviour.
 
-AI tools don't have access to the organisational context: the deployment constraints, the team agreements, the compliance requirements, the reason something was done a particular way three years ago. That knowledge lives in people, not code. And in legacy systems, it's often the most important knowledge there is.
+**Identify the decisions.** Session handling, persistent storage, secrets and multiple running instances need deliberate choices. Get those questions in front of the people who can answer them before spending days polishing the Dockerfile.
 
-That's still yours. The judgment about which changes are safe, which tradeoffs are real, which "quick wins" are landmines with a friendly face — that's the work. AI lowers the cost of getting to the point where you can make those calls. It doesn't make the calls for you.
+**Keep the image straightforward.** A common base image can help when several applications share a runtime and need the same updates. Don't introduce one just because the Dockerfiles look similar.
 
-## The practical shape of it now
+**Make environment-specific configuration explicit.** Paths, service URLs and feature flags need a clear configuration mechanism. Supply secrets through the deployment platform's secret mechanism; don't bake them into the image.
 
-For what it's worth, here's roughly how I'd approach a legacy containerisation today, with AI tooling in the picture:
+**Run the application early.** Build a small working container, find the first failure, fix it and repeat. Check behaviour at the boundaries you're changing, especially storage and process startup.
 
-**Discovery first.** Ask the agent to map the application — what processes run, what config files exist, what external services are referenced, what file paths are hardcoded. Treat this as a starting point for your own investigation, not a definitive answer. Legacy codebases often have behaviour that doesn't show up in a static read.
+**Account for dependencies.** Every system library, OCR engine or local model becomes part of what you build, update and operate. Our [Docling experience](/we-spent-five-weeks-making-docling-work-then-we-deleted-it/) is a reminder of how much work can hide behind adding one package.
 
-**Identify the decisions, not just the tasks.** The genuine work in a containerisation is a small number of architectural choices — how to handle sessions, where persistent storage lives, how secrets are managed, how the application handles multiple running instances. Everything else is mechanics. Get to the decisions faster and spend your time there.
-
-**Keep the base image simple.** If you have multiple applications sharing a common runtime, extract a base image. Agent tooling is good at spotting what's common across applications — use it for that comparison work.
-
-**Externalise everything that changes between environments.** File paths, URLs, secrets, feature flags — environment variables. Not because it's clever, but because it's the minimum requirement for any container to be operationally useful. This hasn't changed.
-
-**Test incrementally.** Don't wait until the Dockerfile is complete to run the application. Run it as early as possible, find the first thing that breaks, fix it, repeat. The agent can help write tests for the areas you're refactoring, but you need to know which areas matter enough to test.
-
-**Understand what you're committing to.** Every dependency you add to the container — a system library, an OCR engine, a local model — is infrastructure you're now responsible for. The Docling post on this blog exists because we learnt that lesson the long way.
-
-## The title still fits
-
-The journey to the centre of the stack is still a journey. The technology has changed, the tooling has improved, and you have better company on the way down than you did five years ago. But the stack is still there, and the centre of it still contains the decisions that matter.
-
-The difference is that you can now spend more of your cognitive budget on the part that actually requires experience to get right.
-
-That seems like a reasonable upgrade.
+The journey to the centre of the stack still involves unfamiliar code and decisions with consequences. Better tools can reduce the reading needed to reach those decisions. They don't remove the need to understand them.

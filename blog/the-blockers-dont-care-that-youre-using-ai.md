@@ -1,5 +1,5 @@
 ---
-title: The Blockers Don't Care That You're Using AI
+title: "Walking skeletons for AI projects"
 slug: the-blockers-dont-care-that-youre-using-ai
 date: 2026-05-21T03:00:00.000Z
 authors: [ambersariya]
@@ -7,22 +7,25 @@ tags:
   - ai-engineering
   - software-delivery
   - walking-skeleton
+last_updated: 2026-11-20T10:38:51.000Z
 ---
 
-I wrote a post back in 2021 about walking skeletons — the idea that before you go deep on features, you ship something thin and deployable end-to-end. Not because it's useful to users, but because it flushes out the real blockers while the cost of finding them is still low. Permissions. Pipelines. Infrastructure assumptions that looked fine on a whiteboard.
+I [wrote about walking skeletons in 2021](/establishing-a-walking-skeleton-for-projects/): get something small running end to end before going deep on features. It exposes permissions, deployment and infrastructure problems while there's still little code depending on your assumptions.
 
-That advice hasn't aged out. If anything, AI projects have made it more relevant, not less.
+I've found the same approach useful on AI projects.
 
 <!-- truncate -->
 
-Here's the thing about AI systems specifically: the surface area for things to silently go wrong is larger. You've got model integrations, inference infrastructure, data pipelines, prompt management, evaluation loops, and whatever cloud hoops your organisation has decided to add on top. Any one of those can be perfectly fine in isolation and a disaster when wired together in a real environment. The feedback loop — getting something running end-to-end early — serves exactly the same purpose it always did. You learn what's actually broken before you've written ten thousand lines of feature code around it.
+Model access, inference, data pipelines and evaluation each add things to connect. They can work in isolation and still fail when you put them together in the environment where the application needs to run.
 
-I saw this recently on an AI project. We pushed to establish the skeleton early, before anyone could argue we weren't ready. And yes, we hit the usual suspects: IAM permissions that looked correct until they didn't, model API access that needed a different approval path than expected, tooling that worked locally and had strong opinions about containers. None of it was AI-specific. I've been burned by the same class of problems in every non-trivial project I've worked on since before "AI engineering" was a job title.
+On a recent AI project, we pushed to establish that path early. We hit IAM permissions that didn't behave as expected, model API access that needed a different approval route, and tooling that worked locally but failed in containers.
 
-What was different was the speed at which we got through it. That's where the AI era genuinely does change things — not the nature of the blockers, but the time between "we found the problem" and "we fixed it." Digging through IAM policies, drafting the right internal request, figuring out the correct incantation for whichever cloud service had opinions today — all of it moved faster with AI tooling alongside. It's a multiplier on the resolution side, not the discovery side.
+These were familiar delivery problems. Calling the project an AI project hadn't removed any of them.
 
-Which is worth saying plainly: AI tooling doesn't help you find blockers you never looked for. The skeleton is still the mechanism for surfacing them. You still have to commit to the discipline of doing it early, before the temptation to just build features wins.
+AI tooling did help us work through them. Investigating IAM policies, drafting access requests and finding the right cloud configuration went faster with an assistant alongside. That's my experience on this project, rather than a guarantee about how quickly these problems can be fixed.
 
-That temptation is strong. AI tooling makes feature development feel fast. You can go from idea to working prototype in a morning. That speed makes it very easy to go deep before you've established whether any of it will actually run in production. And then you've got a lot of impressive-looking code and a pipeline that doesn't exist yet.
+The walking skeleton gave us something concrete to investigate. Without trying the deployment, we wouldn't have known which assumptions were wrong.
 
-The honest caveat: this is still a discipline problem more than a tooling problem. AI makes the fixing faster, but it can't make you look for trouble before you think you need to. The teams that skipped the walking skeleton before will probably still skip it now — just with faster excuses.
+The temptation to skip that step is still there. It's easy to get a prototype working and keep adding features before checking whether it can run in production. Faster code generation can leave you with more code waiting for a pipeline that doesn't exist yet.
+
+For an AI application, I'd start with a thin path through the actual deployment and a real model call, using suitable test data. Then build out from something we know can run. It doesn't need to do much. It needs to expose the things that could stop us shipping.

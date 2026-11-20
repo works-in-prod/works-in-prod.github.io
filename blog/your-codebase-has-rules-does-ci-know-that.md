@@ -1,5 +1,5 @@
 ---
-title: "Your Codebase Has Rules. Does CI Know That?"
+title: "Enforcing architecture rules in CI"
 slug: your-codebase-has-rules-does-ci-know-that
 date: 2026-05-21T06:00:00.000Z
 authors: [ambersariya]
@@ -8,40 +8,42 @@ tags:
   - testing
   - architecture
   - ai-engineering
+last_updated: 2026-11-20T10:38:51.000Z
 ---
 
-There's a particular kind of meeting that happens on mixed teams. Someone's opened a pull request, and two engineers are staring at the same diff with completely different facial expressions. One is confused. The other is quietly furious. Neither is wrong, exactly — they just have entirely different mental models of what the codebase is *supposed* to look like.
+Two engineers can review the same pull request and disagree about where the code belongs. They may have worked in the same repository for months without realising they have different ideas about its architecture.
 
-That's the drift I'm talking about. Not bugs. Not broken tests. Just two people who've been building in the same repository for months and have somehow ended up with incompatible ideas about what goes where.
+We've caught that kind of drift with architecture tests: checks that turn agreed dependency rules into failures in continuous integration (CI).
 
 <!-- truncate -->
 
-The friction tends to come from different professional histories. Engineers who came up through software development often have layered architecture drilled in early. Engineers who came up through data science and ML often optimised for iteration speed over structure. Neither background is wrong — they just don't automatically agree on where things belong.
+Different projects and professional backgrounds teach different habits. Unless a team makes its boundaries explicit, those habits become assumptions that surface during code review.
 
-The answer, at least in part, is [pytest-archon](https://github.com/jwbargsten/pytest-archonon). It lets you write tests that assert structural rules about your codebase. Not "does this function return the right value" — more like "nothing in the API layer should reach directly into the database layer." Rules you'd normally write in a wiki nobody reads, enforced as a test that CI will actually fail on.
-
-Here's what that looks like:
+[pytest-archon](https://github.com/jwbargsten/pytest-archon) lets you express import rules for a Python codebase. For example, suppose the team has agreed that API modules must not import database modules directly:
 
 ```python
 from pytest_archon import archrule
 
+
 def test_api_does_not_import_database():
     (
-        archrule("api-layer-isolation")
-        .match("myapp.api.*")
-        .should_not_import("myapp.database.*")
-        .check("myapp")
+        archrule("api-layer-isolation", use_regex=True)
+        .match(r"^myapp\.api(\..*)?$")
+        .should_not_import(r"^myapp\.database(\..*)?$")
+        .check("myapp", only_direct_imports=True)
     )
 ```
 
-That's it. That test will fail if anyone — human or otherwise — writes an API handler that imports a database model directly. No relying on the comment thread getting resolved. No wiki page that's accurate until it isn't. The build fails. The feedback is immediate.
+The patterns include the package modules themselves and their submodules. `only_direct_imports=True` limits this rule to direct imports; without it, pytest-archon also checks transitive dependencies.
 
-Which brings me to the agentic angle, because this isn't just about human engineers anymore. When you're vibe-coding with an agent generating chunks of your codebase, the agent doesn't inherently know your architectural rules. It knows how to write Python. It does not know that your team decided six months ago that services should never instantiate repositories directly. Architecture tests give it the same feedback signal they give a human: *that's not how we do it here, try again.*
+Run the test in CI and an API handler that imports a database model will fail the check. It won't prevent every possible way of reaching the database at runtime. It checks the import boundary we've described.
 
-The rules become the documentation. Living documentation, with teeth. If the structure is correct, the tests pass. If it drifts — whether from a human in a hurry or an agent that didn't know better — they don't.
+## The same feedback for humans and agents
 
-We caught no bugs this way. We caught something slower and harder to fix than bugs: a gradual divergence in how the team understood the system. An AI engineer pulling in a service directly from an API handler because that's how you'd do it in a notebook. A software engineer quietly losing the will to review it because the conversation about why it's wrong is long and the PR queue is longer.
+An agent doesn't automatically know that your team agreed on this boundary six months ago. Written instructions help, but an executable check also tells it when its change violates the rule.
 
-Architecture tests remove the conversation. The boundary is in the codebase. The codebase enforces it. Everyone, human and agent alike, gets the same feedback.
+That's useful for human contributors too. A visible, consistently checked rule can reduce the time spent repeating the same dependency discussion in review.
 
-Getting ahead of drift is worth more than most people give it credit for.
+The test doesn't decide whether the boundary is right. The team still needs to agree on it, explain why it matters and change it when the design changes. Architecture tests can enforce a poor decision just as reliably as a good one.
+
+What they give us is a way to catch divergence early, before different assumptions become established patterns across the repository.

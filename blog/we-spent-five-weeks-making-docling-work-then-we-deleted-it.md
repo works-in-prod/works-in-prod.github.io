@@ -1,8 +1,8 @@
 ---
-title: We Spent Five Weeks Making Docling Work. Then We Deleted It.
+title: "Why we removed Docling"
 slug: we-spent-five-weeks-making-docling-work-then-we-deleted-it
 date: 2026-05-21T08:00:00.000Z
-last_updated: 2026-05-21T12:00:00.000Z
+last_updated: 2026-11-20T10:38:51.000Z
 authors: [ambersariya]
 tags:
   - ai-engineering
@@ -11,101 +11,77 @@ tags:
   - document-parsing
 ---
 
-This is a post-mortem on five weeks of infrastructure work that ended with `git rm` and 1,452 lines deleted from the lockfile alone.
+We spent five weeks integrating and tuning Docling, then removed it. The removal deleted 1,452 lines from `uv.lock` alone.
 
-The library in question is [Docling](https://github.com/DS4SD/docling). It's a capable open-source document parser from IBM Research — handles PDFs, tables, figures, DOCX, the lot. On paper it looked like exactly what we needed. In practice it turned out to be a small ML platform hiding inside a Python package, and we didn't fully appreciate that distinction until we were already three acts deep.
+The parser met our document-extraction requirements. Running its models inside our application pods cost more operational work than we'd expected, and a managed API eventually met the need with less local infrastructure.
 
 <!-- truncate -->
 
-## Act I: The Optimistic Beginning
+## Adding the parser
 
-The first pull request adding Docling was merged and reverted on the same day. A flag from the universe that was politely ignored.
+[Docling](https://github.com/docling-project/docling) handles document conversion, including PDFs, tables and Word documents. Our integration also brought model downloads, OCR dependencies and inference into the application runtime.
 
-A couple of days later it was back in with the proper integration. The complications started immediately:
+The first pull request was merged and reverted on the same day. That should probably have earned more attention than it did.
 
-- A Docker entrypoint script was needed to pre-download HuggingFace models at
-  container startup
-- `HOME` and `HF_HOME` env vars had to be manually set so the image could
-  write to its own cache directories
-- The `DOCLING_MODELS` list kept breaking as a shell argument — positional
-  args split incorrectly, then comma-separated, then space-separated — three
-  separate fixes for what should have been a config value
-- Tesseract OCR and OpenCV had to be added to the runtime Docker stage
-- EasyOCR kept sneaking back into the model list and had to be explicitly
-  excluded every time
+A couple of days later, the integration was back. We needed to:
 
-None of this is catastrophic. But it's the kind of friction that tells you something about what you're dealing with.
+- Download Hugging Face models during container startup.
+- Set `HOME` and `HF_HOME` so the container could write to its cache.
+- Fix how the `DOCLING_MODELS` list passed through shell arguments.
+- Add Tesseract OCR and OpenCV to the runtime image.
+- Keep EasyOCR out of the model list when it wasn't part of the intended setup.
 
-## Act II: The Model Infrastructure Tax
+Each issue was manageable. Together, they were a sign that we'd taken on more than a parsing function.
 
-Because Docling models can't be downloaded at cold-start in production — far too slow (EKS health checks started failing almost immediately) — a CI/CD model sync workflow was introduced to pre-bake them into the Docker image. The container ballooned from a small fish to a blowfish, which led to caching the models in S3 with an InitContainer. This became its own small project: a GitHub Actions workflow to sync models, config to point Docling at the S3 cache path, and downstream fixes when the sync workflow itself had bugs.
+## Managing the models
 
-The application now had an out-of-band model synchronisation pipeline that had to be kept in step with the Docling version in `pyproject.toml`. Updating the OCR engine or parser models meant updating the Dockerfile, updating the sync workflow, and triggering the S3 pipeline before deploy — in that order.
+Downloading models during startup was too slow for our production health checks. We introduced a CI workflow to prepare them in the image, then moved towards an S3 cache and a Kubernetes init container as image size became a problem.
 
-This is the moment where "we added a parsing library" became "we are now operating a small model registry."
+The model sync workflow had its own configuration and bugs. It also had to stay aligned with the Docling version in `pyproject.toml`. Updating the parser or OCR engine meant coordinating the Dockerfile, sync workflow and cached models before deployment.
 
-## Act III: The Performance Whack-a-Mole
+We'd added a parsing library and ended up maintaining a model-distribution process.
 
-- OMP thread count reduced from 4 to 2 because Docling was spawning more CPU
-  threads than the pod's limit. The pod was being throttled.
-- `images_scale` pinned to 1.0, accelerator switched to `AUTO`
-- Thread bootstrap broke entirely and had to be fixed
-- The parse method was decomposed to make tuning easier
-- OCR engine switched from EasyOCR to RapidOCR — which then had to be added to
-  the model sync workflow and the Docker defaults
-- OCR skipped entirely for native digital PDFs — meaning Docling's headline
-  feature wasn't being used for the most common input type
+## Tuning the runtime
 
-On the same day as that last round of fixes, a VLM-based parser was added and validated in a few hours. It used Bedrock's document API directly. No local models. No thread budget. Just an API call.
+Several rounds of changes followed:
 
-## Act IV: The Quiet Betrayal
+- Reduced the OpenMP thread count from four to two after CPU throttling.
+- Pinned `images_scale` to `1.0` and set the accelerator to `AUTO`.
+- Fixed thread initialisation and split up the parse method to make tuning easier.
+- Switched from EasyOCR to RapidOCR, then updated the model sync workflow and defaults.
+- Skipped OCR for native digital PDFs where it wasn't needed.
 
-A config change silently disabled Docling routing and enabled the VLM parsers by default. Docling was still in the codebase, still in the Docker image, still pulling in Torch and Tesseract and RapidOCR and a full HuggingFace model cache.
+These changes addressed specific problems, but the operational cost kept growing.
 
-It was handling zero traffic.
+On the day of the last round of fixes, we added a parser using a vision-language model (VLM) through Bedrock. We validated that route in a few hours. It removed local inference from the request path.
 
-## Act V: The Purge
+## Removing the unused integration
 
-Gone. All of it.
+We changed the default routing to use the VLM parsers. Docling was still in the source, Docker image and dependency tree, but it was handling no traffic.
 
-- The Docling parser and all its tests
-- The S3 model sync CI workflow
-- All Docling-specific settings and constants
-- Torch, Tesseract, OpenCV from the build
-- The Docker entrypoint script
-- The thread-count tuning, the `images_scale` pin, all of it
-
-1,452 lines deleted from `uv.lock` alone.
+So we removed the parser, its tests, the model sync workflow, settings, entrypoint bootstrap and inference dependencies. That was where the 1,452-line lockfile reduction came from.
 
 ## What replaced it
 
-Two parsers, one fallback chain, zero local ML models.
+The primary parser sends document bytes to Claude through Bedrock. For documents that exceed the direct-input limit, a fallback rasterises PDF pages with `pypdfium2` and sends page images for extraction. DOCX files on that fallback route go through headless LibreOffice first.
 
-The primary path sends the raw document bytes directly to Bedrock as a document content block — one API call, no pre-processing. Claude handles layout, tables, and embedded images natively. The only constraint is an undocumented ~4.5 MB limit on document blocks; files over that automatically fall through to the fallback.
+AWS [documents a 4.5 MB limit per document in Converse messages](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Message.html). The fallback also has to respect image, request and model limits; converting a file to images doesn't remove those constraints.
 
-The fallback rasterises each page to an image using `pypdfium2` and sends them to Bedrock vision in parallel. DOCX files go through LibreOffice headless first to become a PDF, then hit the same rasterise-and-describe path.
+| Concern | Our Docling integration | Replacement |
+| --- | --- | --- |
+| Document extraction | Locally loaded parser and OCR models | Bedrock document input, with a page-image fallback |
+| Model distribution | S3 sync workflow and startup configuration | Managed by the provider |
+| Local dependencies | Torch, OCR engines, OpenCV and model files | `pypdfium2` and LibreOffice for the fallback |
+| Runtime concerns | Model loading, memory, CPU and thread tuning | API latency, quotas, cost and failure handling |
 
-The comparison:
+We removed one set of responsibilities and accepted another. The managed route still needs monitoring, retries where appropriate, and review of what document data can be sent to the provider.
 
-| Concern             | Docling                                       | Now                               |
-| ------------------- | --------------------------------------------- | --------------------------------- |
-| PDF text extraction | Torch + Tesseract + layout models             | Bedrock document block            |
-| Tables              | Docling HTML table mode                       | Claude extracts to HTML natively  |
-| Images / figures    | SmolVLM locally                               | Bedrock vision per page           |
-| DOCX                | pydocx parser                                 | LibreOffice → PDF → same VLM path |
-| Dependencies        | Torch, Tesseract, RapidOCR, OpenCV, HF models | pypdfium2, LibreOffice (system)   |
-| Infrastructure      | S3 model sync pipeline, entrypoint bootstrap  | Nothing — models live in Bedrock  |
+## What I'd check earlier
 
-The entire local inference stack is gone. Parsing is now API calls with a lightweight rasterisation step as fallback for large files.
+Our mistake was treating extraction quality as enough evidence to commit to the integration. We hadn't adequately checked what it would take to operate the chosen pipeline on CPU-limited production pods.
 
-## The lesson, if there is one
+That doesn't establish that Docling needs a GPU or can't run well on a CPU. Its [configuration options](https://docling-project.github.io/docling/usage/advanced_options/) and the workload matter. We may have missed settings that would have helped.
 
-Docling required bundling a mini ML stack — Torch, Tesseract, RapidOCR, HuggingFace models — plus a dedicated S3 sync pipeline and several rounds of thread-count tuning, to do PDF parsing that a Bedrock API call does better with zero infrastructure overhead and a thirty-line parser class.
+A managed API also isn't an option everywhere. Self-hosting, offline processing and data-handling constraints can justify the work of operating local models.
 
-In hindsight the clue was in the very first day: merged and reverted before anyone had even run it in a container. The library wasn't broken — it did what it said. The mistake was not recognising early enough that we were running local inference on CPU-based nodes. Docling's layout models and OCR pipeline are designed for GPU workloads — on CPU they're slow by nature, not by misconfiguration. No amount of OMP thread tuning was going to fix that. We gave it a Kubernetes pod with a CPU limit and spent three weeks wondering why it was slow, when the answer was baked into the infrastructure choice from the start.
-
-To be clear: Docling is a capable library. On GPU-backed infrastructure, with a proper model serving layer, it likely performs well — and there are self-hosted or air-gapped contexts where a managed API isn't an option and something like Docling is exactly the right tool. We may also have missed configuration options that would have helped. It's entirely possible that with different infrastructure or more time, we'd have got there.
-
-But that's the point. The question isn't whether a tool works in the right environment — it's whether your environment is the right one for it. Running local inference on CPU nodes in an application service, when a managed API exists that does the job with less ops surface, is a mismatch. Not a failure of the tool. A failure of context.
-
-We learnt it the expensive way.
+For our workload and environment, the API route met the need with less local operational work. I'd compare that option earlier next time, alongside testing the local parser on production-equivalent hardware.

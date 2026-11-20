@@ -1,18 +1,18 @@
 ---
-title: Blogging Like a Hacker
+title: "Hello, world"
 slug: blogging-like-a-hacker
 description: First post
 date: 2017-01-29T02:01:12.000Z
 modified: 2022-05-18T12:01:34.181Z
+last_updated: 2026-11-20T10:38:51.000Z
 ---
-Hello World :earth_asia:
+
+Hello, world. :earth_asia:
+
+This is my first post. I've worked as a software developer in the UK since 2011, but until now I haven't written much about it.
 
 <!-- truncate -->
 
-This is my first post, hoping there's a lot more I can write, but for now, this is me getting started with blogging.
+I've learnt a lot from other people's blogs. I'd like to share some of what I've picked up and give something back.
 
-I am an experienced Software Developer from the UK. I started my first fulltime job in 2011, I never thought to share my thoughts & experience. Through this blog, I am hoping to channel my thoughts and hopefully pay forward the knowledge in the same way I've found to be useful from other bloggers.
-
-For now, I have a lot to learn about GitHub pages but I shall be adding more content over the coming future.
-
-Stay tuned. :warning: :construction:
+For now, I'm getting to grips with GitHub Pages. More to come. :construction:

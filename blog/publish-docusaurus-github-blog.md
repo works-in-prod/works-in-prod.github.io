@@ -1,6 +1,6 @@
 ---
 slug: publish-docusaurus-github-blog
-title: Publish Docusaurus blog on Github Pages
+title: "Publishing a Docusaurus blog on GitHub Pages"
 tags:
   - docusaurus
   - blog
@@ -8,34 +8,28 @@ tags:
 modified: 2022-05-18T14:09:58.864Z
 date: 2022-05-18T11:27:11.104Z
 draft: true
+last_updated: 2026-11-20T10:38:51.000Z
 ---
 
-1. Create a repo with your username:
+These are draft setup notes for a Docusaurus blog on GitHub Pages. They don't yet cover the full deployment workflow.
 
-2. Show me the code:
+<!-- truncate -->
+
+## Create the site
+
+For a user or organisation site, create a GitHub repository named `<account>.github.io`, replacing `<account>` with the account name. A project site uses a different URL path and configuration.
+
+Create a local Docusaurus site:
 
 ```shell
-npx create-docusaurus@latest codeeatcode.github.io classic --typescript
-cd codeeatcode.github.io/
-code .
-ll
-ls
-git init
-git commit -am "starting docusaurus blog"
-git add .
-git commit -am "starting docusaurus blog"
-git branch -M main
-git remote add origin git@github.com:CodeEatCode/codeeatcode.github.io.
-git push -u origin main
-git config
-git config --local
-git config --local --list
-git config user.name "Code Eat Code"
-git config --local --list
-git config user.email 1080238+ambersariya@users.noreply.github.com
-git push -u origin main
-git config --local user.email 1080238+ambersariya@users.noreply.github.
-git push -u origin main
-git commit --amend --reset-author
-git push -u origin main
+npx create-docusaurus@latest my-blog classic --typescript
+cd my-blog
 ```
+
+Check the generated package scripts and run the local development server using the package manager selected during setup.
+
+## Configure deployment
+
+Before deploying, set the site URL, base URL, organisation name and project name to match the repository. Follow the [Docusaurus GitHub Pages deployment guide](https://docusaurus.io/docs/deployment#deploying-to-github-pages) for the chosen publishing method.
+
+Before publishing this draft, add and verify a complete build-and-deploy example for the chosen publishing method.

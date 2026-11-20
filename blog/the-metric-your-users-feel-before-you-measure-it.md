@@ -1,5 +1,5 @@
 ---
-title: The Metric Your Users Feel Before You Measure It
+title: "Measuring time to first token"
 slug: the-metric-your-users-feel-before-you-measure-it
 date: 2026-05-21T02:00:00.000Z
 authors: [ambersariya]
@@ -7,86 +7,82 @@ tags:
   - ai-engineering
   - observability
   - performance
+last_updated: 2026-11-20T10:38:51.000Z
 ---
 
-Working on a streaming chat product taught me something: the standard latency metrics don't really describe what users experience. They're not waiting for a page to load or an API to return a JSON blob. They're watching tokens appear — and what they feel before anything appears is the thing most teams aren't measuring.
+For a streaming chat response, total duration doesn't tell you how long the user stared at an empty screen.
 
-That thing is time-to-first-token. TTFT.
+I measure time to first token (TTFT) alongside total duration: in this test, the time from starting the request until the client receives the first non-empty piece of generated text.
 
 <!-- truncate -->
 
-I ran into this while load testing a streaming chat endpoint. The obvious thing to reach for is `http_req_duration` — it's right there in k6, it captures how long the request took, job done. Except it isn't. For a streaming LLM response, `http_req_duration` captures the entire stream from first byte sent to last byte received. If your model takes two seconds to start streaming and then streams for eight seconds, your p95 latency looks like ten seconds. That tells you almost nothing about whether the product feels responsive.
+That definition matters. A connection opening, a keep-alive or an event containing only metadata isn't the first token. The measurement also includes work outside model inference, such as the network and application processing. It isn't the same as timing when the browser actually paints the text.
 
-What matters to the person using a chat interface is: how long until *something* appears? A response that starts in 800ms and streams for thirty seconds feels fast. A response that sits blank for four seconds then dumps everything at once feels broken — even if the total duration is shorter.
+## Measure the first content event
 
-That gap between "request sent" and "first content chunk received" is TTFT, and it's the metric that actually describes streaming UX.
+In [k6's HTTP metrics](https://grafana.com/docs/k6/latest/using-k6/metrics/reference/), `http_req_duration` covers sending the request, waiting and receiving the response. It doesn't isolate the wait for generated text. `http_req_waiting` measures time to first byte, which may arrive before any useful content.
 
-## Measuring it
-
-Standard k6 doesn't parse SSE streams, so you need a custom binary built with [xk6-sse](https://github.com/phymbert/xk6-sse):
+For an SSE endpoint, I've used [xk6-sse](https://github.com/phymbert/xk6-sse). With Go and xk6 installed, this builds a k6 binary with the extension:
 
 ```bash
 xk6 build --with github.com/phymbert/xk6-sse
 ```
 
-Then define a custom `Trend` metric and record it the moment the first content event arrives:
+The example below assumes a GET endpoint whose SSE data events contain JSON like `{"content":"Hello"}`, with `[DONE]` marking completion. Adapt the method, authentication and content extraction to your API; SSE itself doesn't define that payload format.
 
 ```javascript
 import sse from "k6/x/sse";
+import { check } from "k6";
 import { Trend } from "k6/metrics";
 
-const ttft = new Trend("ttft_s", true);
+const ttft = new Trend("ttft_ms", true);
 
 export default function () {
+  const url = __ENV.STREAM_URL;
+  const params = {
+    method: "GET",
+    headers: { Accept: "text/event-stream" },
+  };
   const start = Date.now();
   let firstTokenRecorded = false;
 
-  sse.open(url, params, (client) => {
+  const response = sse.open(url, params, (client) => {
     client.on("event", (event) => {
-      if (!firstTokenRecorded && event.data !== "[DONE]") {
-        ttft.add((Date.now() - start) / 1000);
+      if (firstTokenRecorded || !event.data || event.data === "[DONE]") {
+        return;
+      }
+
+      const payload = JSON.parse(event.data);
+      if (typeof payload.content === "string" && payload.content.length > 0) {
+        ttft.add(Date.now() - start);
         firstTokenRecorded = true;
       }
     });
   });
+
+  check(response, {
+    "stream returned 200": (result) => result.status === 200,
+    "stream contained text": () => firstTokenRecorded,
+  });
 }
 ```
 
-Critically: read the stream to completion even after you've recorded TTFT. Dropping the connection early skews the load profile — the server is still doing work and your test stops accounting for it.
+[Time-valued k6 trends use milliseconds](https://grafana.com/docs/k6/latest/javascript-api/k6-metrics/trend/), so this records the elapsed milliseconds without dividing by 1,000. Run the resulting binary with your endpoint supplied as `STREAM_URL`.
 
-## Load profile design
+The connection stays open after recording TTFT so the test still consumes the response. Closing it early would change the workload you're trying to observe.
 
-For observational load testing, a ramp-and-hold pattern gives you clean steady-state numbers to actually reason about:
+Track errors, timeouts and streams with no text alongside TTFT. Those requests have no TTFT sample; a low percentile among successful streams can hide a failing service. The checks make some failures visible, but a real test also needs endpoint-specific error handling and failure thresholds.
 
-```
-VUs
-100 ┤               ▄▄▄▄▄▄▄
- 50 ┤         ▄▄▄▄▄▀       ▀▄▄▄▄▄
- 10 ┤   ▄▄▄▄▄▀                   ▀▄▄▄▄▄
-  0 ┤──▀                               ▀──
-      ramp  hold   ramp   hold   ramp  hold
-```
+## Choose the load profile deliberately
 
-During a ramp phase, concurrency is in transition — exclude those samples from headline stats. During a hold phase, you have stable concurrency and predictable sample counts. Tag every sample with its phase and VU target so you can filter cleanly in post-processing.
+Ramping concurrency and holding at selected levels can help show where responsiveness changes. Keep the ramp and hold results distinguishable, and define whether you classify samples by request start or measurement time.
 
-One request per VU per hold window also gives you deterministic sample counts: 50 VUs × 60s hold = exactly 50 requests. Reproducible, comparable across runs.
+A 60-second hold with 50 virtual users doesn't imply 50 requests. Each user may complete several iterations. If you need one iteration per user, use a [per-VU-iterations scenario](https://grafana.com/docs/k6/latest/using-k6/scenarios/executors/per-vu-iterations/) and check how many iterations completed. That is a different experiment from sustaining concurrency for a fixed duration.
 
-## What you actually learn
+## What we learnt
 
-Here's where it gets interesting. Once you have TTFT as a real metric, you start seeing things that `http_req_duration` completely hides.
+In our tests, models differed in how quickly they started and how quickly they finished. Prompt-cache hits reduced the first-token delay by hundreds of milliseconds for large system prompts. We also saw TTFT degrade as concurrency increased before throughput alone made the problem obvious.
 
-What we found was that different models have quite different characteristics. Some are fast to start and slow to finish. Some are the opposite. Prompt caching had a measurable effect in our tests — a cache hit on a large system prompt shaved hundreds of milliseconds off first token time, and we wouldn't have seen that signal at all if we'd only been watching total duration.
+Those were observations from our workload, not performance guarantees for another model or deployment.
 
-We also saw how concurrency affects *perceived* responsiveness differently than it affects throughput. At low VU counts the TTFT p95 looked fine. Add more concurrent users and TTFT degraded before throughput did — which means users start feeling slowness before the dashboards register a problem. Your mileage will vary depending on model and infrastructure, but it's worth checking.
-
-These are the kinds of insights that only exist once you're measuring the right thing. Total request duration isn't the wrong metric — it's just the wrong *first* metric for a product where the UX is a stream.
-
-## Set a concrete target before you test
-
-Before running at scale, decide what good looks like. What is an acceptable p95 TTFT at your expected concurrency? Write it down before you look at the numbers — otherwise you'll rationalise whatever you find.
-
-Your target will depend on your model, your infrastructure, your users' expectations, and honestly, what your provider can actually deliver under load. The test reveals that; it doesn't guarantee it. But without a target, you're just generating numbers.
-
----
-
-*TTFT is one dimension. Token throughput — how fast the stream itself moves once started — is another. Both matter, and they can point in opposite directions. Worth measuring separately.*
+Before testing, choose a p95 TTFT target at the concurrency you expect, along with an acceptable error rate. Keep measuring total duration and token throughput too. A quick first token is useful, but it doesn't tell you whether the rest of the response arrives at a useful pace.
