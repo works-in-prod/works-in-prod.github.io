@@ -133,7 +133,7 @@ module.exports = async function () {
                     items: [],
                 },
                 footer: {
-                    copyright: `© ${new Date().getFullYear()} Danish Javed · Vibe-posted. Fact-checked. Mostly.`,
+                    copyright: `© ${new Date().getFullYear()} Danish Javed`,
                 },
                 prism: {
                     theme: prismThemes.github,
