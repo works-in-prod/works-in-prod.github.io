@@ -1,0 +1,85 @@
+/* Works in Prod themes. Apply with <html data-palette="phosphor">. Default is paper-ink. */
+
+/* Paper & Ink (light) */
+:root, [data-palette="paper-ink"] {
+  color-scheme: light;
+  --bg: #F3EFE3;
+  --ink: #1A1A26;
+  --muted: #55526A;
+  --accent: #2F6B2F;
+  --link: #2338A8;
+  --visited: #6A2C8C;
+  --code: #E8E2D1;
+  --rule: #C9C2AE;
+  --focus: #F2B705;
+}
+
+/* Phosphor (dark) */
+[data-palette="phosphor"] {
+  color-scheme: dark;
+  --bg: #14161C;
+  --ink: #E8E4D4;
+  --muted: #A5A3B8;
+  --accent: #7FD17F;
+  --link: #8DB3FF;
+  --visited: #C9A0F0;
+  --code: #1D2029;
+  --rule: #363A4D;
+  --focus: #F2B705;
+}
+
+/* Blueprint (light) */
+[data-palette="blueprint"] {
+  color-scheme: light;
+  --bg: #EDF1F7;
+  --ink: #0F1A30;
+  --muted: #4A5670;
+  --accent: #B24A12;
+  --link: #0B4DB0;
+  --visited: #6B2FA0;
+  --code: #DDE5F1;
+  --rule: #BAC6DA;
+  --focus: #F2B705;
+}
+
+/* Amber CRT (dark) */
+[data-palette="amber-crt"] {
+  color-scheme: dark;
+  --bg: #1A1408;
+  --ink: #F4E2B8;
+  --muted: #BFA878;
+  --accent: #FFB000;
+  --link: #FFD36B;
+  --visited: #E8A0C8;
+  --code: #241C0C;
+  --rule: #4A3C1C;
+  --focus: #6FD0FF;
+}
+
+/* Handheld LCD (light) */
+[data-palette="handheld-lcd"] {
+  color-scheme: light;
+  --bg: #DDE8C0;
+  --ink: #1B2E1F;
+  --muted: #42593F;
+  --accent: #2C5A2E;
+  --link: #14487A;
+  --visited: #6A2C6C;
+  --code: #CCDAA9;
+  --rule: #A9BC84;
+  --focus: #D9480F;
+}
+
+/* Floppy (light) */
+[data-palette="floppy"] {
+  color-scheme: light;
+  --bg: #F6F0E6;
+  --ink: #231A2E;
+  --muted: #5C4F6B;
+  --accent: #B3245B;
+  --link: #0F5C73;
+  --visited: #7A2B8A;
+  --code: #EBE1D0;
+  --rule: #D3C6B0;
+  --focus: #1B6EF3;
+}

@@ -25,6 +25,26 @@ before it will load project tasks. The toolchain tracks the Node 24 LTS line
 used by the GitHub Pages workflows. Existing pnpm commands work directly when
 the pinned tools are already on `PATH`.
 
+### Colour themes
+
+The footer theme selector offers the six Claude Design palettes. Colour values are in
+`src/theme/palettes.json` and `src/css/palettes.css`; the default palette and
+browser storage key are in `src/theme/palette-settings.json`.
+
+Palette selection uses `data-palette` on the HTML element. Docusaurus keeps its
+own `data-theme` attribute for light/dark mode and syntax highlighting. The
+selection is restored before the page renders. If browser storage is unavailable,
+switching still works for the current page.
+
+The supplied layout styles are in `src/css/site.css`. Docusaurus-specific styles
+are in `src/css/custom.css`; custom page layouts and the masthead/footer live in
+`src/theme/`. Keep the `.navbar` class on the static masthead: Docusaurus uses it
+when calculating table-of-contents offsets.
+
+Silkscreen, Literata and IBM Plex Mono are self-hosted under `static/fonts/`.
+Keep the accompanying font licence files when redistributing them. Font-face
+definitions are in `src/css/fonts.css`.
+
 ### Local Development
 
 ```

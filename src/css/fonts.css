@@ -1,0 +1,9 @@
+/* Self-hosted fonts. All three are SIL Open Font License 1.1 (see fonts/LICENSE-*.txt).
+   Latin subset only. Add the latin-ext files from @fontsource if you need more characters. */
+@font-face{font-family:"Silkscreen";font-style:normal;font-weight:400;font-display:swap;src:url("../../static/fonts/silkscreen-latin-400-normal.woff2") format("woff2")}
+@font-face{font-family:"Literata";font-style:normal;font-weight:400;font-display:swap;src:url("../../static/fonts/literata-latin-400-normal.woff2") format("woff2")}
+@font-face{font-family:"Literata";font-style:italic;font-weight:400;font-display:swap;src:url("../../static/fonts/literata-latin-400-italic.woff2") format("woff2")}
+@font-face{font-family:"Literata";font-style:normal;font-weight:600;font-display:swap;src:url("../../static/fonts/literata-latin-600-normal.woff2") format("woff2")}
+@font-face{font-family:"Literata";font-style:normal;font-weight:700;font-display:swap;src:url("../../static/fonts/literata-latin-700-normal.woff2") format("woff2")}
+@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:400;font-display:swap;src:url("../../static/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2")}
+@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:500;font-display:swap;src:url("../../static/fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2")}

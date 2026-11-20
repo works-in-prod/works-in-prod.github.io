@@ -2,7 +2,6 @@ import React from 'react';
 import clsx from 'clsx';
 import {translate} from '@docusaurus/Translate';
 import {usePluralForm} from '@docusaurus/theme-common';
-import {useDateTimeFormat} from '@docusaurus/theme-common/internal';
 import {useBlogPost} from '@docusaurus/plugin-content-blog/client';
 import styles from './styles.module.css';
 
@@ -41,7 +40,7 @@ export default function BlogPostItemHeaderInfo({className}) {
   const {date, readingTime, frontMatter} = metadata;
   const lastUpdated = frontMatter?.last_updated;
 
-  const dateTimeFormat = useDateTimeFormat({
+  const dateTimeFormat = new Intl.DateTimeFormat('en-GB', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
